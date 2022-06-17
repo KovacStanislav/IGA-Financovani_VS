@@ -123,3 +123,8 @@ summary(lm(RANK.OVERALL.TRUE~
 
 
 plot(data$STUD.TOTALISCED5_7, data$PERS.TOTACAHC)
+
+
+# pripravím generovanie modelov so súhrnom štatistík
+# 
+
