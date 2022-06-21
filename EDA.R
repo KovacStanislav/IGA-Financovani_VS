@@ -128,3 +128,7 @@ plot(data$STUD.TOTALISCED5_7, data$PERS.TOTACAHC)
 # pripravím generovanie modelov so súhrnom štatistík
 # 
 
+expand.grid(c("a","b"),c("d","e"),c("f","g"))
+
+ 
+
