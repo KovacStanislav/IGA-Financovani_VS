@@ -109,16 +109,57 @@ GGally::ggpairs(data %>% select(RANK.OVERALL.TRUE,
 
 # doplniť HDP a sledovať závislosť
 
+set1 = data_prem %>% filter(Tema == "FINANCE", abs(RANK.OVERALL.TRUE)>.25) %>% .$Variable
+set2 = data_prem %>% filter(Tema == "STAFF", abs(RANK.OVERALL.TRUE)>.25) %>% .$Variable
+set3 = data_prem %>% filter(Tema == "STUDENTI A ABSOLVENTI", abs(RANK.OVERALL.TRUE)>.25) %>% .$Variable
+set4 = data_prem %>% filter(Tema == "OBORY - STUDENTI A ABSOLVENTI", abs(RANK.OVERALL.TRUE)>.25) %>% .$Variable
+
+generate_model_def = function(i,n){
+  if (n == 4) md = paste0("paste0('mylm = lm(RANK.OVERALL.TRUE~',dfc[",i,
+                         ",1],'+',dfc[",i,",2],'+',dfc[",i,",3],'+',dfc[",i,
+                         ",4],',data = data)')") else md = 
+                 paste0("paste0('mylm = lm(RANK.OVERALL.TRUE~',dfc[",i,
+                        ",1],'+',dfc[",i,",2],'+',dfc[",i,
+                        ",3],',data = data)')")
+}
 
 
-data$STUD.ISCED5_7FOE08_SHARE
+df_comb = expand.grid(set1,set2,set3,set4)
+dfc4 = cbind(as.character(df_comb$Var1),
+            as.character(df_comb$Var2),
+            as.character(df_comb$Var3),
+            as.character(df_comb$Var4))
+dfc3 = dfc4[,1:3]
 
-summary(lm(RANK.OVERALL.TRUE~
-            EXP.CURRNONPERSON.EURO + 
-             PERS.TOTACAHC+ 
-            IND.RES.PHDINTENSITY+
-             STUD.PER.STAFF, 
-           data = data))
+calc_rsq = function(dfc){
+  results = c()
+  for (i in 1:nrow(df_comb)){
+    text_to_eval = generate_model_def(i,ncol(dfc))
+    eval(parse(text=eval(parse(text=text_to_eval))))
+    results <- c(results,summary(mylm)$r.squared)
+  }
+  return(results)
+}
+
+r4 = calc_rsq(dfc4)
+
+best_result = max(r4) 
+which_is_best = which.max(r4)
+dfc[which_is_best,]
+
+eval(parse(text=eval(parse(text=generate_model_def(which_is_best,4)))))
+summary(mylm)
+
+r3 = calc_rsq(dfc3)
+
+best_result = max(r3) 
+which_is_best = which.max(r3)
+dfc[which_is_best,]
+
+eval(parse(text=eval(parse(text=generate_model_def(which_is_best,3)))))
+summary(mylm)
+
+
 
 
 
@@ -127,8 +168,6 @@ plot(data$STUD.TOTALISCED5_7, data$PERS.TOTACAHC)
 
 # pripravím generovanie modelov so súhrnom štatistík
 # 
-
-expand.grid(c("a","b"),c("d","e"),c("f","g"))
 
  
 
