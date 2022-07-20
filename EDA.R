@@ -6,7 +6,6 @@ if(length(new.packages)) install.packages(new.packages)
 lapply(list.of.packages, require, character.only = TRUE)
 rm(list = c("list.of.packages","new.packages"))
 
-
 # Map table for countries to region
 map_cntry=data.frame(BAS.COUNTRY=c("UK","FR","DE","LU","BE","AT","CH","IE","NL",
                                    "NO","FI","DK","SE","IS",
@@ -23,8 +22,14 @@ map_rank =data.frame(RANK=c(1:200,
                             "201-250","251-300","301-350",
                             "401-500", "501-600",
                             "601-800", "801-1000"),
-                     RANK_num   =c(1:200,225,275,325, 450, 550, 700, 900))
+                     RANK_num =c(1:200,225,275,325, 450, 550, 700, 900))
 
+map_gdp= read_xlsx(path="GDP_per_capita.xlsx", 
+                   sheet="Sheet 1", range = "A10:B55") %>% 
+  tibble %>% merge(read.csv("Dim_Countries_EuroStat.csv",quote = '"'),
+                   by.x= "GEO (Labels)", by.y = "country_name")
+
+colnames(map_gdp) = c("GEO","GDP_pc","BAS.COUNTRY" )
 
 data =  read_xlsx(path = "ETER_THE_2018_ext - korelace.xlsx", sheet="data") %>% tibble # load data
 data_prem =  read_xlsx(path = "ETER_THE_2018_ext - korelace.xlsx", sheet="vysledky") %>% tibble # load data
@@ -40,12 +45,16 @@ n = nrow(data)
 cntry_list = data %>% select(BAS.COUNTRY) %>% distinct() %>% pull() 
 unlisted_cnt = length(cntry_list[!cntry_list %in% map_cntry$BAS.COUNTRY])
 if (unlisted_cnt>0) message("There are countries not listed within region")
-rm(list = c("cntry_list","unlisted_cnt"))
 
 # map region
 data %<>% 
   merge(map_cntry,by = "BAS.COUNTRY") %<>% 
+  merge(map_gdp, by = "BAS.COUNTRY") %<>% 
   merge(map_rank, by = "RANK")
+
+rm(list = c("cntry_list","unlisted_cnt","map_cntry","map_gdp","map_rank"))
+
+
 
 # change variable types for numerical
 for (col in colnames(data)){
@@ -67,11 +76,6 @@ for(col in numerics){
 }
 
 sum(numerics)
-
-GGally::ggpairs(data=)
-
-
-rm(list = c("map_cntry","map_rank","col"))
 
 
 summary(lm(RANK_num ~ EXP.CURRPERSON.EURO,data))
@@ -114,7 +118,7 @@ set2 = data_prem %>% filter(Tema == "STAFF", abs(RANK.OVERALL.TRUE)>.25) %>% .$V
 set3 = data_prem %>% filter(Tema == "STUDENTI A ABSOLVENTI", abs(RANK.OVERALL.TRUE)>.25) %>% .$Variable
 set4 = data_prem %>% filter(Tema == "OBORY - STUDENTI A ABSOLVENTI", abs(RANK.OVERALL.TRUE)>.25) %>% .$Variable
 
-generate_model_def = function(i,n){
+generate_model_def = function(i,n,dfc){
   if (n == 4) md = paste0("paste0('mylm = lm(RANK.OVERALL.TRUE~',dfc[",i,
                          ",1],'+',dfc[",i,",2],'+',dfc[",i,",3],'+',dfc[",i,
                          ",4],',data = data)')") else md = 
@@ -134,7 +138,7 @@ dfc3 = dfc4[,1:3]
 calc_rsq = function(dfc){
   results = c()
   for (i in 1:nrow(df_comb)){
-    text_to_eval = generate_model_def(i,ncol(dfc))
+    text_to_eval = generate_model_def(i,ncol(dfc),dfc)
     eval(parse(text=eval(parse(text=text_to_eval))))
     results <- c(results,summary(mylm)$r.squared)
   }
@@ -145,18 +149,22 @@ r4 = calc_rsq(dfc4)
 
 best_result = max(r4) 
 which_is_best = which.max(r4)
-dfc[which_is_best,]
+dfc4[which_is_best,]
 
-eval(parse(text=eval(parse(text=generate_model_def(which_is_best,4)))))
+dfc = dfc4
+
+eval(parse(text=eval(parse(text=generate_model_def(which_is_best,4,dfc4)))))
 summary(mylm)
 
 r3 = calc_rsq(dfc3)
 
 best_result = max(r3) 
 which_is_best = which.max(r3)
-dfc[which_is_best,]
+dfc3[which_is_best,]
 
-eval(parse(text=eval(parse(text=generate_model_def(which_is_best,3)))))
+dfc = dfc3
+
+eval(parse(text=eval(parse(text=generate_model_def(which_is_best,3,dfc3)))))
 summary(mylm)
 
 
@@ -166,8 +174,50 @@ summary(mylm)
 plot(data$STUD.TOTALISCED5_7, data$PERS.TOTACAHC)
 
 
-# pripravím generovanie modelov so súhrnom štatistík
+# pripraviť generovanie modelov so súhrnom štatistík
 # 
 
- 
+data$EXP.CURRTOTAL.EURO = as.numeric(data$EXP.CURRTOTAL.EURO)
+data$GDP_pc = as.numeric(data$GDP_pc)
+summary(with(data, lm(RANK_num~EXP.CURRTOTAL.EURO+GDP_pc)))
+
+
+
+
+# 0. krivka rank overall vysvetlené pomocou curr personal expenditure (tvar krivky?) 
+  # rozdelenie pre LR, nájsť nejaký interval, 
+    # pomocou ktorého by sme vizualizovali percentá okolo krivky
+  # 100 je max pohľadať alternatívy ku KLR
+
+# 1. model hovorí (aj keď slabý) že medzi jednotlivými školami vrámci země 
+  # sú odlišnosti najma vo total expenses a GDP  (rebríček - 1 najlepšie)
+
+# 2. skúmanie rozdielov medzi zeměmi (multilevel/strom na základe)
+ # zhlukovka? 
+  # neefektivita školství? nezachycuje? zachycuje čo by nemal? 
+  # napr VB má rovnomerne nad a pod krivkou, u nás pod krivkou, belgické nad krivkou... čo to znamená?
+  # dekomponovanie na jednotlivé ukazatele? Dáva zmysel táto kompozícia? Je niekde neefektivita u nás?
+  # Na to potrebujeme krivku
+
+# 3. dá/nedá sa ísť pod svoje umietnenie, a čo zmeniť? skúmať podle zemí na iných faktoroch
+
+# 4. optimalizácia pre štát kam, a ako má štát investovať/pomáhať/promo
+ # rôzny target variable pre skúmanie (suma/priemerné umiestnenie, umiestnenie najlepšej školy, ...)
+
+# 5. Doplnenie premenných 
+  # a) preskúmať rovnosť príjmov
+  # b) ... TODO zamyslieť sa
+
+# 6. časové rady preskúmať ??? TODO
+  # udelat nespojité body, v ktorých budú prierezové analýzy
+  # posunuli sme sa v niečom oproti stavu napr. pred 5-10 rokmi?
+
+# 7. alternatíva k bodu vyššie
+  # chceme koukať na rozdiely ako sa menilo financovanie vysokých škôl vrámci 5 rokov
+  # sme schopní posúdiť, ktoré školy zbohatli viac?
+
+# 8. zlepšenie umiestnenia škôl? jednej školy?
+  # keď pororvnáme kokrétnu školu s podobne bohatými ale lepšími výsledky, 
+    # môžeme určiť v ktorých premenných sa líšia
+
 
