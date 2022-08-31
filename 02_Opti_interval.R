@@ -58,30 +58,66 @@ span <- function(p) {
   return(list(origin=p[a[i],], direction=e[i,], normal=n[i,], width=w[i]))
 }
 
-
-n <- 4
-set.seed(17)
-par(mfrow=c(1,n))
-invisible(replicate(n, {
-  # Create sample data.
-  p <- matrix(na.omit(cbind(data$EXP.CURRNONPERSON.EURO/1e7,
-                            data$RANK.OVERALL.TRUE)), ncol=2)
-  
-  # Find the two lines.
-  s <- span(p)
-  
+# Display everything.
+plot_lines = function(s){
   # Convert the result into parameters for `abline`.
   slope <- s$direction[2] / s$direction[1]
-  origin.1 <- s$origin
   origin.2 <- s$origin + s$width * s$normal
   
-  # Display everything.
-  plot(p, pch = 3)
   if (s$direction[1] != 0) {
-    abline(a=origin.1[2]-slope*origin.1[1], b=slope, col="Red")
-    abline(a=origin.2[2]-slope*origin.2[1], b=slope, col="Gray")
+    abline(a= s$origin[2]-slope * s$origin[1], b=slope, col="Red")
+    abline(a= origin.2[2]-slope * origin.2[1], b=slope, col="Gray")
   } else {
-    abline(v = c(origin.1[1], origin.2[1]), col=c("Red", "Gray"))
+    abline(v = c( s$origin[1], origin.2[1]), col=c("Red", "Gray"))
   }
-}))
-par(mfrow=c(1,1))
+}
+
+remove_edge = function(s,d){
+  slope <- s$direction[2] / s$direction[1]
+  origin.2 <- s$origin + s$width * s$normal
+  edges = which( round(d[,2],10) == round(s$origin[2]-slope*s$origin[1]+slope*d[,1],10)
+               | round(d[,2],10) == round(origin.2[2]-slope*origin.2[1]+slope*d[,1],10))
+  wdth = c()
+  for (edge in edges){
+    wdth = c(wdth,span(d[-edge,])$width)
+  }
+  return(edges[which.min(wdth)])
+  
+}
+
+
+get_s <-  function(d,p){
+  n <- nrow(d)
+  s <- span(d)
+  rme <- c()
+  
+  while (n*p < nrow(d)){
+    rme <- remove_edge(s,d)
+    print(d[rme,])
+    d <- d[-rme,]
+    s <- span(d)
+  }
+  return(s)
+}
+
+
+d <- matrix(na.omit(cbind(x,y)), ncol=2)
+plot(d, pch = 3)
+
+plot_lines(span(d))
+
+
+d <- matrix(na.omit(cbind(x,y)), ncol=2)
+s.9 <- get_s(d,.9)
+plot_lines(s.9)
+
+d <- matrix(na.omit(cbind(x,y)), ncol=2)
+s.75 <- get_s(d,.75)
+plot_lines(s.75)
+
+d <- matrix(na.omit(cbind(x,y)), ncol=2)
+s.5 <- get_s(d,.5)
+plot_lines(s.5)
+
+
+
