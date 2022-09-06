@@ -2,53 +2,12 @@
 # spustenie 01_Load_data 
 source("01_Load_data.R")
 
-x = data$EXP.CURRNONPERSON.EURO/1e7
-y = data$RANK.OVERALL.TRUE
-na.action(na.omit(c(1, NA)))
-
-find_opti = function(x,y,p=.5){
-  upr_x = x-median(x,na.rm=T)
-  upr_y = y-median(y,na.rm=T)
-  coeff = summary(lm(upr_y~upr_x))$coefficients
-  gen_b0 = rnorm(1000,coeff[1],coeff[3]*3)
-  gen_b1 = rnorm(1000,coeff[2],coeff[4]*3)
-  
-  mat_b0 = matrix(rep(gen_b0,each=length(upr_y)),ncol= length(gen_b0))
-  mat_b1 = matrix(upr_x,nrow= length(upr_x)) %*% matrix(gen_b1,ncol= length(gen_x))
-  res_mat =mat_b0 + mat_b1
-  qs = apply(res_mat,MARGIN=2,function(x) quantile(abs(x-upr_y),p,na.rm=T))
-  
-  opti_b0 = gen_b0[which.min(qs)]
-  opti_b1 = gen_b1[which.min(qs)]
-  
-  return(c(opti_b0, opti_b1))
-}
-
-opti_b = find_opti(x,y,p=.5)
-
-calc_b = opti_b[2]*(1+median(x,na.rm=T))+median(y,na.rm=T)   # b+ med(x)+f(med(x),b) ... atan(b)
-
-plot(x,y)
-
-abline(a=calc_b,b=opti_b[1])
-
-summary(lm(y~x))
+library(tidyverse)
+library(dplyr)
 
 
-
-plot(x = data$EXP.CURRNONPERSON.EURO/1e7,
-     y = data$RANK.OVERALL.TRUE)
-
-
-ch
-
-
-
-
-
-
-
-span <- function(p) {
+span <- function(d) {
+  p <- d[,1:2]
   a <- chull(p)                     # Indexes of extremal points, negatively oriented
   e <- p[c(a[-1], a[1]), ,drop=FALSE] - p[a, ] # Edge vectors
   e <- e / sqrt(rowSums(e^2))       # Unit edge dirction vectors
@@ -70,6 +29,16 @@ plot_lines = function(s){
   } else {
     abline(v = c( s$origin[1], origin.2[1]), col=c("Red", "Gray"))
   }
+}
+
+get_abline_params <- function(s){
+  slope <- s$direction[2] / s$direction[1]
+  origin.2 <- s$origin + s$width * s$normal
+  
+  a1 = s$origin[2]-slope * s$origin[1]
+  a2 = origin.2[2]-slope * origin.2[1]
+  b = slope
+  return(list(a1=a1,a2=a2,b=b))
 }
 
 remove_edge = function(s,d){
@@ -97,27 +66,63 @@ get_s <-  function(d,p){
     d <- d[-rme,]
     s <- span(d)
   }
-  return(s)
+  data <-  data.frame(d)
+  colnames(data) <-  c("EXP_EUR","RANK","RN")
+  return(list(s=s,data=data))
 }
 
 
-d <- matrix(na.omit(cbind(x,y)), ncol=2)
+d <- cbind(data$EXP.CURRNONPERSON.EURO/1e7,
+           data$RANK.OVERALL.TRUE) %>% 
+      na.omit() %>% 
+      matrix(ncol=2)
+d <-  cbind(d,1:nrow(d))
+
 plot(d, pch = 3)
 
 plot_lines(span(d))
 
+s1.  <- get_s(d,1)
+s.9  <- get_s(d, .9)
+s.75 <- get_s(d, .75)
+s.5  <- get_s(d, .5)
 
-d <- matrix(na.omit(cbind(x,y)), ncol=2)
-s.9 <- get_s(d,.9)
-plot_lines(s.9)
+plot_lines(s.9$s)
+plot_lines(s.75$s)
+plot_lines(s.5$s)
 
-d <- matrix(na.omit(cbind(x,y)), ncol=2)
-s.75 <- get_s(d,.75)
-plot_lines(s.75)
+data <-  s1.$data %>% 
+  left_join(s.9$data, by="RN") %>% 
+  left_join(s.75$data,by="RN") %>% 
+  left_join(s.5$data, by="RN") %>% 
+  mutate(EXP_EUR = EXP_EUR.x,
+         RANK    = RANK.x,
+         in.9    = ifelse(is.na(EXP_EUR.y),1,0),
+         in.75   = ifelse(is.na(EXP_EUR.x.x),1,0),
+         in.5    = ifelse(is.na(EXP_EUR.y.y),1,0)) %>% 
+  mutate( GROUP = case_when((in.9+in.75+in.5) == 0 ~ 'FULL',
+                            (in.9+in.75+in.5) == 1 ~ '90%',
+                            (in.9+in.75+in.5) == 2 ~ '75%',
+                            TRUE ~ '50%')) %>% 
+  select(EXP_EUR,RANK,GROUP)
 
-d <- matrix(na.omit(cbind(x,y)), ncol=2)
-s.5 <- get_s(d,.5)
-plot_lines(s.5)
+abl1.   = get_abline_params(s1.$s)
+abl.9  = get_abline_params(s.9$s)
+abl.75 = get_abline_params(s.75$s)
+abl.5  = get_abline_params(s.5$s)
 
+ggplot(data,aes(x=EXP_EUR, y=RANK, col=GROUP))+
+  geom_point()+
+  scale_color_manual(values = c("red", "purple", "blue", "green"))+
+  geom_abline(slope=abl1.$b,intercept=abl1.$a1,col="red")+
+  geom_abline(slope=abl1.$b,intercept=abl1.$a2,col="red")+
+  geom_abline(slope=abl.9$b,intercept=abl.9$a1,col="purple")+
+  geom_abline(slope=abl.9$b,intercept=abl.9$a2,col="purple")+
+  geom_abline(slope=abl.75$b,intercept=abl.75$a1,col="blue")+
+  geom_abline(slope=abl.75$b,intercept=abl.75$a2,col="blue")+
+  geom_abline(slope=abl.5$b,intercept=abl.5$a1,col="green")+
+  geom_abline(slope=abl.5$b,intercept=abl.5$a2,col="green")
+  
+  
 
 
